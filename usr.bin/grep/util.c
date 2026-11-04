@@ -585,8 +585,32 @@ procline(struct parsec *pc)
 				r = litexec(&pattern[i], pc->ln.dat, 1, &pmatch);
 			else
 #endif
-			r = regexec(&r_pattern[i], pc->ln.dat, 1, &pmatch,
-			    leflags);
+			{
+				/* A nonempty ASCII fixed pattern in a single-byte locale
+				 * needs no regex engine. Keep existing boundary/output logic. */
+				bool literal = grepbehave == GREP_FIXED &&
+				    !(cflags & REG_ICASE) && MB_CUR_MAX == 1 &&
+				    pattern[i].len > 0;
+				for (int k = 0; literal && k < pattern[i].len; k++)
+					if ((unsigned char)pattern[i].pat[k] >= 128 ||
+					    pattern[i].pat[k] == 0)
+						literal = false;
+				if (literal) {
+					const char *first = memchr(pc->ln.dat + st,
+					    (unsigned char)pattern[i].pat[0], pc->ln.len - st);
+					const char *hit = first == NULL ? NULL :
+					    memmem(first, pc->ln.len - (first - pc->ln.dat),
+					    pattern[i].pat, pattern[i].len);
+					r = hit == NULL ? REG_NOMATCH : 0;
+					if (hit != NULL) {
+						pmatch.rm_so = hit - pc->ln.dat;
+						pmatch.rm_eo = pmatch.rm_so + pattern[i].len;
+					}
+				} else {
+					r = regexec(&r_pattern[i], pc->ln.dat, 1, &pmatch,
+					    leflags);
+				}
+			}
 			if (r != 0)
 				continue;
 			/* Check for full match */

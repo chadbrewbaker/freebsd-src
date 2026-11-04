@@ -1,0 +1,37 @@
+Integration-branch literal-search experiment
+
+For nonempty, case-sensitive ASCII fixed patterns in single-byte locales,
+procline uses bounded memchr/memmem instead of invoking regex. Existing
+whole-word/whole-line checks and output handling remain in place. Other
+patterns retain the existing path. No platform compatibility defines or regex
+port modifications are part of this source patch.
+
+Reproducible differential check:
+  python3 tests/check_literal_performance_patch.py /path/to/original/grep /path/to/patched/grep
+
+The script enumerates all 5,461 strings of lengths 0..6 over {a,b,_,space},
+checks 42 pattern/flag combinations, and exercises another 100 cases covering
+binary/text input, C/UTF-8 locales, multiple patterns and output options.
+It compares complete stdout, stderr and exit status. This is a targeted
+compatibility check, not a replacement for FreeBSD's upstream test suite.
+
+Prior matched-source measurements, M2 Ultra / macOS, seven-run medians,
+approximately 32 MiB of deterministic warm-cache input:
+                                   before ms   after ms
+Apple regex: absent literal           80.347     35.458
+Apple regex: rejected boundaries     737.852     85.302
+FreeBSD regex: absent literal         33.444     34.490
+FreeBSD regex: rejected boundaries  1350.318     86.236
+
+These are historical lab measurements of this patch, not fresh timings of this
+integration commit. They demonstrate workload-dependent benefits, not a
+universal improvement. Short-run differences need cautious interpretation.
+The FreeBSD engine was compiled on macOS; these are not native FreeBSD results.
+All native FreeBSD platform/regex source remains unchanged here. Production
+corpora and native FreeBSD builds/tests remain necessary before upstreaming.
+
+The optional macOS regex port and raw SQLite measurements are maintained in
+the separate performance lab, rather than imported into the FreeBSD source
+repository. They pin engine/source revisions and binary hashes. A pre-existing
+zero-context queue UBSan diagnostic was seen in both unpatched and patched
+FreeBSD-source builds on macOS; this patch does not address it.
